@@ -14,6 +14,10 @@ library(tmap)
 library(sf)
 library(tidycensus)
 library(stringr)
+library(here)
+library(janitor)
+
+rm(list = ls())
 ```
 
 ```{r}
@@ -23,5 +27,31 @@ census_api_key("520db2c4b48d0af32d80f2039c1bf42cc25c7276", install=TRUE, overwri
 ```
 
 ```{r}
+# reading in risk data and cleaning a bit
+fair_data_raw <- read.csv("data/ca_fair_data/ca_fair_data.csv") %>% 
+  clean_names()
+
+# remove commas
+fair_data_raw <- lapply(fair_data_raw, function(x) {
+  if (is.character(x) || is.factor(x)) {
+    return(gsub(",", "", x))
+  } else {
+    return(x)
+  }
+})
+
+# convert back to dataframe (now w/o commas)
+fair_data_raw <- as.data.frame(fair_data_raw)
+
+# remove $ from applicable columns
+fair_data_raw$median_income <- substr(fair_data_raw$median_income, 2, nchar(fair_data_raw$median_income))
+fair_data_raw$median_property_value <- substr(fair_data_raw$median_property_value, 2, nchar(fair_data_raw$median_property_value))
+
+# convert all columns except county name to numeric
+first_column <- fair_data_raw[, 1]
+fair_data_raw[-1] <- lapply(fair_data_raw[-1], function(x) as.numeric(gsub(",", "", x)))
+fair_data_raw <- cbind(first_column, fair_data_raw[-1])
+
+
 
 ```
