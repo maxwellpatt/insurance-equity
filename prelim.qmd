@@ -4,8 +4,6 @@ format: html
 editor: visual
 ---
 
-## 
-
 ```{r, message=FALSE}
 # importing libraries
 library(tidyverse)
@@ -17,15 +15,13 @@ library(stringr)
 library(here)
 library(janitor)
 library(leaflet)
+library(ejscreen)
 
 
 rm(list = ls())
-```
 
-```{r}
 # retrieve census API key
 census_api_key("520db2c4b48d0af32d80f2039c1bf42cc25c7276", install=TRUE, overwrite = TRUE)
-
 ```
 
 ```{r}
@@ -53,14 +49,16 @@ fair_data_raw$median_property_value <- substr(fair_data_raw$median_property_valu
 first_column <- fair_data_raw[, 1]
 fair_data_raw[-1] <- lapply(fair_data_raw[-1], function(x) as.numeric(gsub(",", "", x)))
 
+# done cleaning FAIR data
 fair_data_clean <- cbind(first_column, fair_data_raw[-1])
-
 
 
 ```
 
 ```{r}
 # exploring tidycensus for CA
+
+# creating CA median income column
 ca <- get_acs(geography = "county", 
               variables = c(medincome = "B19013_001"), 
               state = "CA", 
@@ -144,7 +142,7 @@ ggplot(zip_fair_sf, aes(x = median_income, y = percent_change_in_insurer_initiat
 ```
 
 ```{r}
-cor.test(zip_fair_sf$median_income, zip_fair_sf$percent_change_in_insurer_initiated_nonrenewals_2015_2021, 
-         method = "pearson")
+
+
 
 ```
