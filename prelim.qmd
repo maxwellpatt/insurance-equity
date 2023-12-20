@@ -6,7 +6,7 @@ editor: visual
 
 ## 
 
-```{r}
+```{r, message=FALSE}
 # importing libraries
 library(tidyverse)
 library(dplyr)
@@ -16,6 +16,8 @@ library(tidycensus)
 library(stringr)
 library(here)
 library(janitor)
+library(leaflet)
+
 
 rm(list = ls())
 ```
@@ -50,8 +52,99 @@ fair_data_raw$median_property_value <- substr(fair_data_raw$median_property_valu
 # convert all columns except county name to numeric
 first_column <- fair_data_raw[, 1]
 fair_data_raw[-1] <- lapply(fair_data_raw[-1], function(x) as.numeric(gsub(",", "", x)))
-fair_data_raw <- cbind(first_column, fair_data_raw[-1])
+
+fair_data_clean <- cbind(first_column, fair_data_raw[-1])
 
 
+
+```
+
+```{r}
+# exploring tidycensus for CA
+ca <- get_acs(geography = "county", 
+              variables = c(medincome = "B19013_001"), 
+              state = "CA", 
+              year = 2021)
+
+# looking at median income of CA
+ca %>%
+  mutate(NAME = gsub(" County, California", "", NAME)) %>%
+  arrange(desc(estimate)) %>%
+  slice_max(order_by = estimate, n = 20) %>%
+  ggplot(aes(x = estimate, y = reorder(NAME, estimate))) +
+  geom_errorbarh(aes(xmin = estimate - moe, xmax = estimate + moe)) +
+  geom_point(color = "red", size = 3) +
+  labs(title = "Household income by county in California",
+       subtitle = "2017-2021 American Community Survey",
+       y = "",
+       x = "ACS estimate (bars represent margin of error)")
+
+
+```
+
+```{r}
+# read in zip code shapefile
+zip_geom <- st_read('data/ca_zip_codes/California_Zip_Codes.shp') %>% 
+  clean_names()
+
+# make sure datasets are ready to merge 
+fair_data_clean$zip_code <- as.character(fair_data_clean$zip_code)
+zip_geom$zip_code <- as.character(zip_geom$zip_code)
+
+# merge data -- currently a datafarme
+zip_fair <- fair_data_clean %>% 
+  left_join(zip_geom, by = "zip_code")
+
+zip_fair_sf_raw <- st_as_sf(zip_fair, crs = st_crs(zip_geom))
+
+# convert to sf for plotting
+zip_fair_sf <- st_transform(zip_fair_sf_raw, crs = 4326)
+```
+
+```{r}
+leaflet(zip_fair_sf) %>%
+  addTiles() %>%
+  addPolygons(
+    fillColor = ~colorNumeric("viridis", percent_change_in_insurer_initiated_nonrenewals_2015_2021)(percent_change_in_insurer_initiated_nonrenewals_2015_2021),
+    weight = 2,
+    opacity = 1,
+    color = "white",
+    dashArray = "3",
+    fillOpacity = 0.7,
+    highlight = highlightOptions(
+      weight = 5,
+      color = "#666",
+      dashArray = "",
+      fillOpacity = 0.7,
+      bringToFront = TRUE
+    ),
+    label = ~paste("ZIP Code:", zip_code, "<br>",
+                   "% change in insurer initiated nonrenewals 2015-2021:", percent_change_in_insurer_initiated_nonrenewals_2015_2021)
+  ) %>%
+  addLegend(
+    "bottomright",
+    pal = colorNumeric("viridis", zip_fair_sf$percent_change_in_insurer_initiated_nonrenewals_2015_2021),
+    values = ~percent_change_in_insurer_initiated_nonrenewals_2015_2021,
+    title = "insurer nonrenewal rate",
+    opacity = 0.7
+  )
+
+```
+
+```{r}
+# median income vs insurer nonrenewal rate 2015 to 2021 
+ggplot(zip_fair_sf, aes(x = median_income, y = percent_change_in_insurer_initiated_nonrenewals_2015_2021)) +
+  geom_point() +
+  geom_smooth(method = "lm", se = TRUE, color = "blue") +  # Adds a linear model fit line
+  labs(x = "Median Income", y = "Percent Change in Insurer Initiated Nonrenewals (2015-2021)",
+       title = "Relationship between Median Income and Change in Insurer Initiated Nonrenewals") +
+  theme_minimal()
+
+
+```
+
+```{r}
+cor.test(zip_fair_sf$median_income, zip_fair_sf$percent_change_in_insurer_initiated_nonrenewals_2015_2021, 
+         method = "pearson")
 
 ```
